@@ -1,6 +1,7 @@
 use anyhow::Result;
 use std::{collections::HashMap, sync::Arc};
 use winit::{
+    event::WindowEvent,
     event_loop::ActiveEventLoop,
     window::{Window, WindowAttributes, WindowId},
 };
@@ -33,5 +34,21 @@ impl Engine {
             windows,
             primary_window_id,
         })
+    }
+
+    pub fn window_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        window_id: WindowId,
+        event: WindowEvent,
+    ) {
+        match event {
+            WindowEvent::CloseRequested => {
+                if window_id == self.primary_window_id {
+                    event_loop.exit();
+                }
+            }
+            _ => {}
+        }
     }
 }

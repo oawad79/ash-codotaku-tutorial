@@ -19,5 +19,8 @@ impl ApplicationHandler for App {
         window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
+        if let Some(engine) = self.engine.as_mut() {
+            engine.window_event(event_loop, window_id, event);
+        }
     }
 }
