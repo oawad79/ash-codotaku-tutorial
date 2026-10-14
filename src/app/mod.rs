@@ -1,4 +1,4 @@
-use winit::application::ApplicationHandler;
+use winit::{application::ApplicationHandler, window::WindowAttributes};
 
 mod engine;
 use engine::Engine;
@@ -11,6 +11,18 @@ pub struct App {
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         self.engine = Some(Engine::new(event_loop).unwrap());
+        if let Some(engine) = self.engine.as_mut() {
+            engine
+                .create_window(
+                    event_loop,
+                    WindowAttributes::default().with_title("Secondary Window"),
+                )
+                .unwrap();
+        }
+    }
+
+    fn suspended(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
+        self.engine = None;
     }
 
     fn window_event(
