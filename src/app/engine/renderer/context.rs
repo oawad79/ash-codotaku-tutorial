@@ -58,7 +58,7 @@ impl Context {
                 None,
             )?;
 
-            let physical_devices = instance
+            let mut physical_devices = instance
                 .enumerate_physical_devices()?
                 .into_iter()
                 .map(|handle| {
@@ -87,7 +87,12 @@ impl Context {
                 })
                 .collect::<Vec<_>>();
 
-            println!("{:#?}", physical_devices);
+            physical_devices.retain(|device| {
+                surface_extension
+                    .get_physical_device_surface_support(device.handle, 0, surface)
+                    .unwrap_or(false)
+            });
+
             Ok(Self {
                 surface,
                 surface_extension,
