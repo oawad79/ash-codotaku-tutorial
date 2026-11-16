@@ -4,6 +4,7 @@ use winit::window::Window;
 
 mod context;
 use context::Context;
+use crate::app::engine::renderer::context::ContextAttributes;
 
 pub struct Renderer {
     context: Context,
@@ -11,7 +12,7 @@ pub struct Renderer {
 
 impl Renderer {
     pub fn new(window: Arc<Window>) -> Result<Self> {
-        let context = Context::new(window)?;
+        let context = Context::new(ContextAttributes)?;
         Ok(Self { context })
     }
 }

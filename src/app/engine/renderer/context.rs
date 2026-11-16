@@ -1,21 +1,26 @@
 use anyhow::{Ok, Result};
 use ash::vk;
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 use winit::{
     raw_window_handle::{HasDisplayHandle, HasWindowHandle},
     window::Window,
 };
 
 pub struct Context {
+    pub queues: Vec<vk::Queue>,
+    pub device: ash::Device,
+    pub queue_family_indicies: HashSet<u32>,
+    pub queue_families: QueueFamilies,
+    pub physical_device: PhysicalDevice,
     pub surface: ash::vk::SurfaceKHR,
     pub surface_extension: ash::khr::surface::Instance,
     pub instance: ash::Instance,
     pub entry: ash::Entry,
-    pub window: Arc<Window>,
+    pub attributes: ContextAttributes,
 }
 
 #[derive(Debug)]
-pub struct QueueFamilies {
+pub struct QueueFamily {
     pub index: u32,
     pub properties: vk::QueueFamilyProperties,
 }
@@ -26,16 +31,30 @@ pub struct PhysicalDevice {
     pub properties: vk::PhysicalDeviceProperties,
     pub features: vk::PhysicalDeviceFeatures,
     pub memory_properties: vk::PhysicalDeviceMemoryProperties,
-    pub queue_families: Vec<QueueFamilies>,
+    pub queue_families: Vec<QueueFamily>,
+}
+
+type QueueFamilyPicker = fn(Vec<PhysicalDevice>) -> Result<(PhysicalDevice, QueueFamilies)>;
+
+pub struct ContextAttributes {
+    pub window: Arc<Window>,
+    pub queue_family_picker: QueueFamilyPicker,
+}
+
+pub struct QueueFamilies {
+    pub graphics: QueueFamily,
+    pub present: QueueFamily,
+    pub transfer: QueueFamily,
+    pub compute: QueueFamily,
 }
 
 impl Context {
-    pub fn new(window: Arc<Window>) -> Result<Self> {
+    pub fn new(attributes: ContextAttributes) -> Result<Self> {
         unsafe {
             let entry = ash::Entry::load()?;
 
-            let raw_display_handle = window.display_handle()?.as_raw();
-            let raw_window_handle = window.window_handle()?.as_raw();
+            let raw_display_handle = attributes.window.display_handle()?.as_raw();
+            let raw_window_handle = attributes.window.window_handle()?.as_raw();
 
             let instance = entry.create_instance(
                 &vk::InstanceCreateInfo::default()
@@ -71,7 +90,7 @@ impl Context {
                     let queue_families = queue_family_properties
                         .into_iter()
                         .enumerate()
-                        .map(|(index, properties)| QueueFamilies {
+                        .map(|(index, properties)| QueueFamily {
                             index: index as u32,
                             properties,
                         })
@@ -93,12 +112,58 @@ impl Context {
                     .unwrap_or(false)
             });
 
+            let (physical_device, queue_families) =
+                (attributes.queue_family_picker)(physical_devices)?;
+
+            let queue_family_indicies = HashSet::from([
+                queue_families.graphics.index,
+                queue_families.present.index,
+                queue_families.transfer.index,
+                queue_families.compute.index,
+            ]);
+
+            let queue_create_infos = queue_family_indicies
+                .iter()
+                .copied()
+                .map(|index| {
+                    vk::DeviceQueueCreateInfo::default()
+                        .queue_family_index(index)
+                        .queue_priorities(&[1.0])
+                })
+                .collect::<Vec<_>>();
+
+            let device = instance.create_device(
+                physical_device.handle,
+                &vk::DeviceCreateInfo::default()
+                    .queue_create_infos(&queue_create_infos)
+                    .enabled_extension_names(&[ash::khr::swapchain::NAME.as_ptr()])
+                    .push_next(
+                        &mut vk::PhysicalDeviceDynamicRenderingFeatures::default()
+                            .dynamic_rendering(true),
+                    )
+                    .push_next(
+                        &mut vk::PhysicalDeviceBufferDeviceAddressFeatures::default()
+                            .buffer_device_address(true),
+                    ),
+                None,
+            )?;
+
+            let queues = queue_family_indicies
+                .iter()
+                .map(|index| device.get_device_queue(*index, 0))
+                .collect::<Vec<_>>();
+
             Ok(Self {
+                queues,
+                device,
+                queue_family_indicies,
+                queue_families,
+                physical_device,
                 surface,
                 surface_extension,
                 instance,
                 entry,
-                window,
+                attributes,
             })
         }
     }
